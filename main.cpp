@@ -6,6 +6,7 @@
 #include <limits>
 #include <ctime>
 #include <windows.h>
+#include <numeric>
 
 #define QUESTION_FILE "questions.txt"
 #define TRANSLATION_FILE "translations.txt"
@@ -15,6 +16,7 @@ struct Question {
     std::string question;
     std::vector<std::string> options;
     int answer;
+    double essentiality;
 };
 
 //翻译题结构体，包含题干、答案
@@ -39,6 +41,7 @@ void startTranslationQuiz();
 void readQuestionsFromFile();
 void readTranslationsFromFile();
 void clearCinBuffer();
+int getWeightedRandomQuestionIndex();
 
 //清空cin缓冲区工具函数，解决getline吞换行
 void clearCinBuffer() {
@@ -75,6 +78,9 @@ void readQuestionsFromFile() {
         } catch (...) {
             continue;
         }
+
+        //重要性默认为1.0
+        q.essentiality = 1.0;
 
         questions.push_back(q);
     }
@@ -173,7 +179,8 @@ void startQuestionQuiz() {
     srand((unsigned)time(nullptr)); // 初始化随机种子
 
     while (true) {
-        int idx = rand() % questions.size();
+        // 加权随机获取下标，替换原纯随机 rand() % questions.size()
+        int idx = getWeightedRandomQuestionIndex();
         Question q = questions[idx];
         std::cout << "=====================" << std::endl;
         std::cout << q.question << std::endl;
@@ -189,9 +196,11 @@ void startQuestionQuiz() {
 
         if (userAns == q.answer) {
             std::cout << "✅ 回答正确！" << std::endl;
+            q.essentiality *= 0.9; // 降低重要性
         } else {
             std::cout << "❌ 回答错误，正确答案：" << q.answer
                       << ". " << q.options[q.answer - 1] << std::endl;
+            q.essentiality *= 1.1; // 提高重要性
         }
         std::cout << "\n按任意键下一题...";
         clearCinBuffer();
@@ -232,6 +241,27 @@ void startTranslationQuiz() {
         system("pause");
         system("cls");
     }
+}
+
+// 加权随机抽取下标：essentiality越大，抽到概率越高
+int getWeightedRandomQuestionIndex() {
+    if (questions.empty()) return -1;
+    // 计算所有权重总和
+    double totalWeight = std::accumulate(
+        questions.begin(), questions.end(), 0.0,
+        [](double sum, const Question& q) { return sum + q.essentiality; }
+    );
+    // 生成 [0, totalWeight) 随机浮点数
+    double randVal = (double)rand() / RAND_MAX * totalWeight;
+    double curSum = 0.0;
+    // 遍历找到命中区间
+    for (int i = 0; i < questions.size(); i++) {
+        curSum += questions[i].essentiality;
+        if (randVal < curSum) {
+            return i;
+        }
+    }
+    return questions.size() - 1; // 兜底返回最后一题
 }
 
 //主菜单
